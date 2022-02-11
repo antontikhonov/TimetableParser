@@ -8,15 +8,14 @@ import org.apache.poi.ss.util.CellRangeAddress
 import java.io.File
 import java.io.FileInputStream
 
-private const val TIMETABLE_FILE = "D:\\timetable\\M.xls"
+private const val TIMETABLE_FILE = "C:\\timetable\\М.xls"
 private val myExcelBook = HSSFWorkbook(FileInputStream(TIMETABLE_FILE))
 val gson: Gson = GsonBuilder().serializeNulls().create()
 
-const val START_FIRST_GROUP_ROW = 0
-
 fun main() {
-    val sheet = myExcelBook.getSheetAt(3)
-    readSheet(sheet)
+//    val sheet = myExcelBook.getSheetAt(0)
+//    readSheet(sheet)
+    readFile(myExcelBook)
 }
 
 private fun readFile(hssfWorkbook: HSSFWorkbook) {
@@ -26,20 +25,33 @@ private fun readFile(hssfWorkbook: HSSFWorkbook) {
 }
 
 private fun readSheet(sheet: Sheet) {
+    val START_FIRST_GROUP_ROW = findFirstRow(sheet)
+
     for (i in 2..30) {
         if (sheet.getRow(START_FIRST_GROUP_ROW)?.getCell(i, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL)?.stringCellValue == null) continue
         readWeek(sheet, START_FIRST_GROUP_ROW + 1, i)
     }
 }
 
+private fun findFirstRow(sheet: Sheet): Int {
+    var z = 0
+    for (i in 0..30) {
+        if (sheet.getRow(i)?.getCell(0, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL)?.stringCellValue == "группа") {
+            z = i
+            return z
+        }
+    }
+    return z
+}
+
 private fun readWeek(sheet: Sheet, startRow: Int, column: Int) {
-    val numberOfGroup = sheet.getRow(START_FIRST_GROUP_ROW).getCell(column).stringCellValue
+    val numberOfGroup = sheet.getRow(findFirstRow(sheet)).getCell(column).stringCellValue
     val days = mutableListOf<TimetableDay>()
     for (i in startRow..startRow + 70 step 14) {
         days.add(readDay(sheet, i, column))
     }
     val strDay = gson.toJson(GroupTimetable(numberOfGroup, days))
-    File("D:\\timetable\\${numberOfGroup}").writeText(strDay, Charsets.UTF_16)
+    File("C:\\timetable\\М\\${numberOfGroup}").writeText(strDay, Charsets.UTF_16)
 }
 
 private fun readDay(sheet: Sheet, startRow: Int, column: Int): TimetableDay {
@@ -65,11 +77,18 @@ private fun getPairKlass(sheet: Sheet, row: Int, column: Int): PairKlass {
             secondCell = null
         }
     }
-
     return PairKlass(
         ClassNumber.getNumber(number).time,
         firstCell?.stringCellValue,
         secondCell?.stringCellValue
+    ).cleanBlank()
+}
+
+private fun PairKlass.cleanBlank(): PairKlass {
+    return this.copy(
+        time = time,
+        odd = if (odd == "" && even == "") null else odd,
+        even = if (even == "" && odd == "") null else even
     )
 }
 
