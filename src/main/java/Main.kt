@@ -8,8 +8,10 @@ import org.apache.poi.ss.util.CellRangeAddress
 import java.io.File
 import java.io.FileInputStream
 
-private const val TIMETABLE_FILE = "C:\\timetable\\М.xls"
+private const val FAKULTET_NAME = "ИМОП"
+private const val TIMETABLE_FILE = "C:\\timetable\\$FAKULTET_NAME.xls"
 private val myExcelBook = HSSFWorkbook(FileInputStream(TIMETABLE_FILE))
+private const val DELTA_BETWEEN_FIRST_LAST_DAY_ROW = 70
 val gson: Gson = GsonBuilder().serializeNulls().create()
 
 fun main() {
@@ -25,49 +27,56 @@ private fun readFile(hssfWorkbook: HSSFWorkbook) {
 }
 
 private fun readSheet(sheet: Sheet) {
-    val START_FIRST_GROUP_ROW = findFirstRow(sheet)
+    val firstGroupRow = findFirstRow(sheet)
 
-    for (i in 2..30) {
-        if (sheet.getRow(START_FIRST_GROUP_ROW)?.getCell(i, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL)?.stringCellValue == null) continue
-        readWeek(sheet, START_FIRST_GROUP_ROW + 1, i)
+    // проходим по столбцам, если попадается пустой, то переходим к следующему листу
+    for (columnIndex in 2..500) {
+        if (sheet.getRow(firstGroupRow)?.getCell(columnIndex, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL)?.stringCellValue == null) continue
+        readWeek(sheet = sheet, startRow = firstGroupRow + 1, columnIndex = columnIndex)
     }
 }
 
+// Возвращаем номер строки, в которой перечислены номера групп
 private fun findFirstRow(sheet: Sheet): Int {
-    var z = 0
-    for (i in 0..30) {
-        if (sheet.getRow(i)?.getCell(0, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL)?.stringCellValue == "группа") {
-            z = i
-            return z
+    for (rowIndex in 0..30) {
+        if (sheet.getRow(rowIndex)?.getCell(0, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL)?.stringCellValue == "группа") {
+            return rowIndex
         }
     }
-    return z
+    throw Exception("Не найдена ячейка \"группа\"")
 }
 
-private fun readWeek(sheet: Sheet, startRow: Int, column: Int) {
-    val numberOfGroup = sheet.getRow(findFirstRow(sheet)).getCell(column).stringCellValue
+private fun readWeek(sheet: Sheet, startRow: Int, columnIndex: Int) {
+    // получаем название группы
+    val numberOfGroup = sheet.getRow(findFirstRow(sheet)).getCell(columnIndex).stringCellValue
     val days = mutableListOf<TimetableDay>()
-    for (i in startRow..startRow + 70 step 14) {
-        days.add(readDay(sheet, i, column))
+    for (startRowIndex in startRow..startRow + DELTA_BETWEEN_FIRST_LAST_DAY_ROW step 14) {
+        days.add(readDay(sheet = sheet, startRow = startRowIndex, column = columnIndex))
     }
     val strDay = gson.toJson(GroupTimetable(numberOfGroup, days))
-    File("C:\\timetable\\М\\${numberOfGroup}").writeText(strDay, Charsets.UTF_16)
+    println(numberOfGroup)
+    File("C:\\timetable\\$FAKULTET_NAME").mkdirs()
+    File("C:\\timetable\\$FAKULTET_NAME\\${numberOfGroup}").writeText(strDay, Charsets.UTF_16)
 }
 
 private fun readDay(sheet: Sheet, startRow: Int, column: Int): TimetableDay {
     val day = sheet.getRow(startRow).getCell(0).stringCellValue
-    val classes = mutableListOf<PairKlass>()
+    println(day)
+    val lessonsList = mutableListOf<PairKlass>()
+
     for (i in startRow..startRow + 12 step 2) {
-        classes.add(getPairKlass(sheet, i, column))
+        lessonsList.add(getPairKlass(sheet, i, column))
     }
-    return TimetableDay(day, classes)
+
+    return TimetableDay(day, lessonsList)
 }
 
 private fun getPairKlass(sheet: Sheet, row: Int, column: Int): PairKlass {
+    println("Строчка - $row, столбец - $column")
     val number = sheet.getRow(row).getCell(1).stringCellValue.toInt()
 
-    var firstCell = sheet.getRow(row).getCell(column)
-    var secondCell = sheet.getRow(row + 1).getCell(column)
+    var firstCell = sheet.getRow(row).getCell(column, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)
+    var secondCell = sheet.getRow(row + 1).getCell(column, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK)
     getMergedRegion(firstCell)?.let {
         firstCell = sheet.getRow(it.firstRow).getCell(it.firstColumn, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL)
     }
